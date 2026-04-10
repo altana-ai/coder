@@ -343,8 +343,22 @@ func (c *Config) ValidateToken(ctx context.Context, link *oauth2.Token) (bool, *
 		return false, nil, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
-		// The token is no longer valid!
+	if res.StatusCode == http.StatusUnauthorized {
+		// A 401 always means the token is invalid.
+		return false, nil, nil
+	}
+	if res.StatusCode == http.StatusForbidden {
+		// GitHub returns 403 for both "unauthorized token" and "rate
+		// limit exceeded." Treating a rate-limit 403 as an invalid
+		// token causes spurious failures that persist until the rate
+		// limit resets (up to 1 hour). Distinguish the two by
+		// checking the X-RateLimit-Remaining header that GitHub
+		// includes on rate-limit responses.
+		if rl := res.Header.Get("X-RateLimit-Remaining"); rl == "0" {
+			data, _ := io.ReadAll(res.Body)
+			return false, nil, xerrors.Errorf("rate limit exceeded: status %d: body: %s", res.StatusCode, data)
+		}
+		// Not a rate limit — the token is genuinely forbidden.
 		return false, nil, nil
 	}
 	if res.StatusCode != http.StatusOK {
