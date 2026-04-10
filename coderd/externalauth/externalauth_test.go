@@ -578,6 +578,63 @@ func TestRevokeToken(t *testing.T) {
 	})
 }
 
+func TestValidateToken(t *testing.T) {
+	t.Parallel()
+
+	// RateLimitedIs403 tests that a 403 with X-RateLimit-Remaining: 0
+	// is treated as a transient rate limit error (returned as an error),
+	// not as an invalid token (returned as valid=false). GitHub returns
+	// 403 for both "bad token" and "rate limit exceeded," and conflating
+	// the two causes spurious token invalidation when the IP-based rate
+	// limit is exhausted.
+	t.Run("RateLimitedIs403", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Limit", "60")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+		}))
+		defer srv.Close()
+
+		f := promoauth.NewFactory(prometheus.NewRegistry())
+		config := &externalauth.Config{
+			InstrumentedOAuth2Config: f.New("test", &oauth2.Config{}),
+			ValidateURL:              srv.URL,
+		}
+		token := &oauth2.Token{AccessToken: "test-token"}
+
+		valid, _, err := config.ValidateToken(context.Background(), token)
+		require.Error(t, err, "rate limit should be returned as an error, not as valid=false")
+		require.Contains(t, err.Error(), "rate limit exceeded")
+		require.False(t, valid)
+	})
+
+	// ForbiddenIsInvalid tests that a 403 without rate limit headers
+	// is treated as an invalid token.
+	t.Run("ForbiddenIsInvalid", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"Resource not accessible"}`))
+		}))
+		defer srv.Close()
+
+		f := promoauth.NewFactory(prometheus.NewRegistry())
+		config := &externalauth.Config{
+			InstrumentedOAuth2Config: f.New("test", &oauth2.Config{}),
+			ValidateURL:              srv.URL,
+		}
+		token := &oauth2.Token{AccessToken: "test-token"}
+
+		valid, _, err := config.ValidateToken(context.Background(), token)
+		require.NoError(t, err)
+		require.False(t, valid, "forbidden without rate limit should mean invalid token")
+	})
+}
+
 func TestExchangeWithClientSecret(t *testing.T) {
 	t.Parallel()
 	instrument := promoauth.NewFactory(prometheus.NewRegistry())
