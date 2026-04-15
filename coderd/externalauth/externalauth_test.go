@@ -118,6 +118,9 @@ func TestRefreshToken(t *testing.T) {
 	t.Run("ValidateServerError", func(t *testing.T) {
 		t.Parallel()
 
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+
 		const staticError = "static error"
 		validated := false
 		fake, config, link := setupOauth2Test(t, testConfig{
@@ -131,10 +134,13 @@ func TestRefreshToken(t *testing.T) {
 			},
 		})
 
+		// The refreshed token is persisted before validation.
+		mDB.EXPECT().UpdateExternalAuthLink(gomock.Any(), gomock.Any()).Return(link, nil).Times(1)
+
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 		link.OAuthExpiry = expired
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.ErrorContains(t, err, staticError)
 		// Unsure if this should be the correct behavior. It's an invalid token because
 		// 'ValidateToken()' failed with a runtime error. This was the previous behavior,
@@ -270,9 +276,58 @@ func TestRefreshToken(t *testing.T) {
 		require.Equal(t, "winner-refresh-token", result.OAuthRefreshToken)
 	})
 
+	// ConcurrentRefreshRaceClearedToken tests that when the loser
+	// re-reads the DB and finds the refresh token was cleared (by
+	// another loser, not a winner), it does NOT treat it as a
+	// successful concurrent refresh and still caches the failure.
+	t.Run("ConcurrentRefreshRaceClearedToken", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+
+		fake, config, link := setupOauth2Test(t, testConfig{
+			FakeIDPOpts: []oidctest.FakeIDPOpt{
+				oidctest.WithRefresh(func(_ string) error {
+					return &oauth2.RetrieveError{
+						Response: &http.Response{
+							StatusCode: http.StatusOK,
+						},
+						ErrorCode: "bad_refresh_token",
+					}
+				}),
+			},
+			ExternalAuthOpt: func(cfg *externalauth.Config) {},
+		})
+
+		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
+		link.OAuthExpiry = time.Now().Add(time.Hour * -1)
+
+		// Simulate another loser that already cleared the refresh
+		// token. The re-read returns an empty refresh token, which
+		// should NOT be treated as a winner's successful refresh.
+		clearedLink := link
+		clearedLink.OAuthRefreshToken = ""
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(clearedLink, nil).Times(1)
+
+		// Since the token was cleared (not refreshed), the failure
+		// should be cached.
+		mDB.EXPECT().UpdateExternalAuthLinkRefreshToken(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
+		require.Error(t, err)
+		require.True(t, externalauth.IsInvalidTokenError(err))
+	})
+
 	// ValidateFailure tests if the token is no longer valid with a 401 response.
 	t.Run("ValidateFailure", func(t *testing.T) {
 		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
 
 		const staticError = "static error"
 		validated := false
@@ -287,10 +342,13 @@ func TestRefreshToken(t *testing.T) {
 			},
 		})
 
+		// The refreshed token is persisted before validation.
+		mDB.EXPECT().UpdateExternalAuthLink(gomock.Any(), gomock.Any()).Return(link, nil).Times(1)
+
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 		link.OAuthExpiry = expired
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.ErrorContains(t, err, "token failed to validate")
 		require.True(t, externalauth.IsInvalidTokenError(err))
 		require.True(t, validated, "token should have been attempted to be validated")
