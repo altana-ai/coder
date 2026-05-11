@@ -534,6 +534,17 @@ type createWorkspaceOptions struct {
 	remoteAddr string
 }
 
+// subjectIsAdmin reports whether the subject holds a site owner or
+// organization admin role.
+func subjectIsAdmin(subject rbac.Subject) bool {
+	for _, role := range subject.Roles.Names() {
+		if role.Name == rbac.RoleOwner().Name || role.Name == rbac.RoleOrgAdmin() {
+			return true
+		}
+	}
+	return false
+}
+
 func createWorkspace(
 	ctx context.Context,
 	auditReq *audit.Request[database.WorkspaceTable],
@@ -545,6 +556,16 @@ func createWorkspace(
 ) (codersdk.Workspace, error) {
 	if opts == nil {
 		opts = &createWorkspaceOptions{}
+	}
+
+	// Workspace creation is restricted to administrators while we migrate
+	// from POC Coder to Production Coder. Existing workspaces can still be
+	// started and stopped by their owners.
+	if !subjectIsAdmin(httpmw.UserAuthorization(ctx)) {
+		return codersdk.Workspace{}, httperror.NewResponseError(http.StatusForbidden, codersdk.Response{
+			Message: "Workspace creation is disabled during the migration from POC Coder to Production Coder.",
+			Detail:  "New workspaces cannot be created on POC Coder. You can still start and stop your existing workspaces here. See the announcement for migration details: https://altanatech.slack.com/archives/C0A4CNYU78C/p1778276987152419",
+		})
 	}
 
 	template, err := requestTemplate(ctx, req, api.Database)
