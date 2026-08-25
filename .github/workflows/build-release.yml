@@ -69,34 +69,34 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build the frontend (embedded in the server binary)
+      - name: Install frontend dependencies
         if: steps.resolve.outputs.exists == 'false' || inputs.force
         working-directory: site
         run: |
           set -euo pipefail
           corepack enable
           pnpm install --frozen-lockfile
-          pnpm build
 
-      - name: Build the linux server binaries (arm64 + amd64)
+      - name: Build the linux fat binaries (arm64 + amd64)
         if: steps.resolve.outputs.exists == 'false' || inputs.force
         env:
           TAG: ${{ inputs.tag }}
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOFLAGS: -trimpath
         run: |
           set -euo pipefail
           version="${TAG#v}"
+          go mod download
+          # Build the way Coder's own release CI does (.github/workflows/release.yaml):
+          # mark generated files fresh so make skips codegen, then build the fat
+          # binary target. The fat binary embeds the frontend AND site/out/bin (the
+          # client CLI binaries) via -tags embed; a plain `go build` is a slim build
+          # with no static files. Cross-compiles from the amd64 runner.
+          make gen/mark-fresh
+          make -j VERSION="$version" \
+            "build/coder_${version}_linux_arm64" \
+            "build/coder_${version}_linux_amd64"
           mkdir -p out
-          # Match the existing altana-ai/coder release convention: a bare binary
-          # named coder_<tag>_linux_<arch> (tag keeps its leading v). The
-          # deployment is Graviton (arm64) today; amd64 is built for parity so the
-          # release always carries whatever a target needs.
           for arch in arm64 amd64; do
-            GOARCH="$arch" go build \
-              -ldflags "-X github.com/coder/coder/v2/buildinfo.tag=${version}" \
-              -o "out/coder_${TAG}_linux_${arch}" ./cmd/coder
+            cp "build/coder_${version}_linux_${arch}" "out/coder_${TAG}_linux_${arch}"
             (cd out && sha256sum "coder_${TAG}_linux_${arch}" > "coder_${TAG}_linux_${arch}.sha256")
           done
           ls -la out
