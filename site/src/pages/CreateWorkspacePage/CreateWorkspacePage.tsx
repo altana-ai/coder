@@ -51,6 +51,11 @@ const CreateWorkspacePage: React.FC = () => {
 
 	const [latestResponse, setLatestResponse] =
 		useState<DynamicParametersResponse | null>(null);
+	// True while a dynamic-parameters request is in flight (sent but the matching
+	// response has not arrived). Used to block workspace creation until the form
+	// has been reconciled with the server, so a fast click can't submit stale
+	// parameter values (e.g. a branch that hasn't been applied yet).
+	const [parametersUpdating, setParametersUpdating] = useState(false);
 	// The current expected response ID.  Starts at -1 because the backend sends
 	// an initial message when the web socket is connected with -1.
 	const wsResponseId = useRef<number>(-1);
@@ -182,6 +187,7 @@ const CreateWorkspacePage: React.FC = () => {
 		if (ws.current && ws.current.readyState === WebSocket.OPEN) {
 			wsResponseId.current = wsResponseId.current + 1;
 			ws.current.send(JSON.stringify(request));
+			setParametersUpdating(true);
 			return true;
 		}
 		if (ws.current) {
@@ -233,6 +239,8 @@ const CreateWorkspacePage: React.FC = () => {
 				onMessage: (response: DynamicParametersResponse) => {
 					if (response.id >= wsResponseId.current) {
 						setLatestResponse(response);
+						// The latest request has been reconciled; allow creation.
+						setParametersUpdating(false);
 					}
 				},
 				onError: (error) => {
@@ -470,6 +478,7 @@ const CreateWorkspacePage: React.FC = () => {
 						}
 						hasIgnoredUrlParams={hasIgnoredUrlParams}
 						creatingWorkspace={createWorkspaceMutation.isPending}
+						parametersUpdating={parametersUpdating}
 						sendMessage={sendMessage}
 						onCancel={() => {
 							navigate(-1);
