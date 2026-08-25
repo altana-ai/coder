@@ -51,6 +51,11 @@ const CreateWorkspacePage: FC = () => {
 
 	const [latestResponse, setLatestResponse] =
 		useState<DynamicParametersResponse | null>(null);
+	// True while a dynamic-parameters request is in flight (sent but the matching
+	// response has not arrived). Blocks workspace creation until the form is
+	// reconciled with the server, so a fast click can't submit stale parameter
+	// values (e.g. a branch that hasn't been applied yet).
+	const [parametersUpdating, setParametersUpdating] = useState(false);
 	const wsResponseId = useRef<number>(-1);
 	const ws = useRef<WebSocket | null>(null);
 	const [wsError, setWsError] = useState<Error | null>(null);
@@ -167,6 +172,7 @@ const CreateWorkspacePage: FC = () => {
 		if (ws.current && ws.current.readyState === WebSocket.OPEN) {
 			ws.current.send(JSON.stringify(request));
 			wsResponseId.current = wsResponseId.current + 1;
+			setParametersUpdating(true);
 		}
 	};
 
@@ -204,6 +210,11 @@ const CreateWorkspacePage: FC = () => {
 		if (latestResponse && latestResponse?.id >= response.id) {
 			return;
 		}
+
+		// The awaited response arrived; clear the in-flight flag. If an initial
+		// params resend fires below it re-sets the flag, so the button stays
+		// disabled until that reconciliation completes too.
+		setParametersUpdating(false);
 
 		if (!initialParamsSentRef.current && response.parameters?.length > 0) {
 			sendInitialParameters([...response.parameters]);
@@ -434,6 +445,7 @@ const CreateWorkspacePage: FC = () => {
 					}
 					hasIgnoredUrlParams={hasIgnoredUrlParams}
 					creatingWorkspace={createWorkspaceMutation.isPending}
+					parametersUpdating={parametersUpdating}
 					sendMessage={sendMessage}
 					onCancel={() => {
 						navigate(-1);
