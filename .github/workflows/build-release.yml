@@ -1,0 +1,139 @@
+name: build-release
+
+# Build a linux/arm64 Coder server binary from this fork, with Altana's patched
+# preview/trivy pulled in via the go.mod replaces on this branch, and publish it
+# as a GitHub release. Altana's Coder Terraform then installs it from this public
+# release URL instead of a private registry. Modeled on altana-ai/skopeo-binary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag to build (e.g. dynamic-params-closure-v2.35.4)."
+        required: true
+        type: string
+      tag:
+        description: "Release tag to publish (e.g. v2.35.4-param-closure)."
+        required: true
+        type: string
+      force:
+        description: "Rebuild and overwrite even if a release already exists for that tag."
+        required: false
+        type: boolean
+        default: false
+
+# The release step deletes and recreates a tag; never let two publishes race it.
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    name: Build coder (linux/arm64) and release it
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload its assets
+    steps:
+      - name: Check out the ref to build
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Skip if a release already exists for the tag
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "A release for $TAG already exists."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+
+      - name: Build the frontend (embedded in the server binary)
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        working-directory: site
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build the linux server binaries (arm64 + amd64)
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        env:
+          TAG: ${{ inputs.tag }}
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOFLAGS: -trimpath
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          mkdir -p out
+          # Match the existing altana-ai/coder release convention: a bare binary
+          # named coder_<tag>_linux_<arch> (tag keeps its leading v). The
+          # deployment is Graviton (arm64) today; amd64 is built for parity so the
+          # release always carries whatever a target needs.
+          for arch in arm64 amd64; do
+            GOARCH="$arch" go build \
+              -ldflags "-X github.com/coder/coder/v2/buildinfo.tag=${version}" \
+              -o "out/coder_${TAG}_linux_${arch}" ./cmd/coder
+            (cd out && sha256sum "coder_${TAG}_linux_${arch}" > "coder_${TAG}_linux_${arch}.sha256")
+          done
+          ls -la out
+
+      - name: Write release notes
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        run: |
+          set -euo pipefail
+          {
+            echo "Altana build of the Coder server, linux/arm64."
+            echo
+            echo "Built from this fork at \`$GITHUB_SHA\` with go.mod replaces pinning Altana's"
+            echo "patched coder/preview and coder/trivy (the dynamic-parameters preview"
+            echo "performance change). The frontend is embedded; the asset is the upstream"
+            echo "release shape (coder_<version>_linux_arm64.tar.gz)."
+            echo
+            echo "- Go: \`$(go version | awk '{print $3}')\`"
+            echo "- Workflow: [run ${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish release
+        if: steps.resolve.outputs.exists == 'false' || inputs.force
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG: dynamic parameters render only the parameter closure" \
+            --notes-file notes.md \
+            "out/coder_${TAG}_linux_arm64" \
+            "out/coder_${TAG}_linux_arm64.sha256" \
+            "out/coder_${TAG}_linux_amd64" \
+            "out/coder_${TAG}_linux_amd64.sha256"
