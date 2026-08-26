@@ -85,18 +85,40 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           go mod download
-          # Build the way Coder's own release CI does (.github/workflows/release.yaml):
-          # mark generated files fresh so make skips codegen, then build the fat
-          # binary target. The fat binary embeds the frontend AND site/out/bin (the
-          # client CLI binaries) via -tags embed; a plain `go build` is a slim build
-          # with no static files. Cross-compiles from the amd64 runner.
-          make gen/mark-fresh
-          make -j VERSION="$version" \
-            "build/coder_${version}_linux_arm64" \
-            "build/coder_${version}_linux_amd64"
+          # Build directly with build_go.sh, not `make build/...`. The make target
+          # depends on gen/mark-fresh, which rebuilds protoc-generated files
+          # (site/e2e/provisionerGenerated.ts); protoc is not on the runner so make
+          # fails. We only need the committed frontend + the fat server binary,
+          # neither of which needs protoc.
+          #
+          # 1. Frontend app (vite). Consumes the committed typesGenerated.ts.
+          (cd site && pnpm build)
+          # 2. Client CLI binaries the server serves for CLI download / agent
+          #    fetch. coderd extracts these at runtime from the embedded
+          #    bin/coder.tar.zst (validated against bin/coder.sha1) — see
+          #    site/bin.go — so we must reproduce exactly what `make` bakes into
+          #    site/out/bin: slim per-platform binaries, sha1 checksum, then a
+          #    zstd tar, then delete the raw binaries. Slim builds need no protoc.
+          #    Must run AFTER pnpm build populates site/out.
+          mkdir -p site/out/bin
+          for t in linux:amd64 linux:arm64 darwin:amd64 darwin:arm64 windows:amd64; do
+            os="${t%%:*}"; arch="${t##*:}"; ext=""
+            [ "$os" = "windows" ] && ext=".exe"
+            CODER_SLIM_BUILD=1 ./scripts/build_go.sh --slim --os "$os" --arch "$arch" \
+              --version "$version" --output "site/out/bin/coder-${os}-${arch}${ext}"
+          done
+          ( cd site/out/bin
+            openssl dgst -r -sha1 coder-* | tee coder.sha1
+            tar cf coder.tar coder-*
+            zstd -22 --ultra --force --long --no-progress -o coder.tar.zst coder.tar
+            rm -f coder.tar coder-*
+          )
+          # 3. Fat server binaries. build_go.sh embeds site/out (frontend + client
+          #    binaries) via -tags embed by default. Cross-compiled from amd64.
           mkdir -p out
           for arch in arm64 amd64; do
-            cp "build/coder_${version}_linux_${arch}" "out/coder_${TAG}_linux_${arch}"
+            ./scripts/build_go.sh --os linux --arch "$arch" \
+              --version "$version" --output "out/coder_${TAG}_linux_${arch}"
             (cd out && sha256sum "coder_${TAG}_linux_${arch}" > "coder_${TAG}_linux_${arch}.sha256")
           done
           ls -la out
