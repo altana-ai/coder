@@ -35,7 +35,7 @@ type authorizeParams struct {
 	codeChallengeMethod string // PKCE challenge method
 }
 
-func extractAuthorizeParams(r *http.Request, callbackURL *url.URL) (authorizeParams, []codersdk.ValidationError, error) {
+func extractAuthorizeParams(r *http.Request, callbackURL *url.URL, allowedRedirectURLs []*url.URL) (authorizeParams, []codersdk.ValidationError, error) {
 	p := httpapi.NewQueryParamParser()
 	vals := r.URL.Query()
 
@@ -44,7 +44,7 @@ func extractAuthorizeParams(r *http.Request, callbackURL *url.URL) (authorizePar
 
 	params := authorizeParams{
 		clientID:            p.String(vals, "", "client_id"),
-		redirectURL:         p.RedirectURL(vals, callbackURL, "redirect_uri"),
+		redirectURL:         p.RedirectURLMatchingAny(vals, callbackURL, allowedRedirectURLs, "redirect_uri"),
 		redirectURIProvided: vals.Get("redirect_uri") != "",
 		responseType:        httpapi.ParseCustom(p, vals, "", "response_type", httpapi.ParseEnum[codersdk.OAuth2ProviderResponseType]),
 		scope:               strings.Fields(strings.TrimSpace(p.String(vals, "", "scope"))),
@@ -83,6 +83,24 @@ func extractAuthorizeParams(r *http.Request, callbackURL *url.URL) (authorizePar
 	return params, nil, nil
 }
 
+// registeredRedirectURLs parses the app's registered redirect URIs for exact
+// matching, falling back to the primary callback for apps stored before
+// redirect_uris was populated.
+func registeredRedirectURLs(app database.OAuth2ProviderApp) []*url.URL {
+	urls := make([]*url.URL, 0, len(app.RedirectUris)+1)
+	for _, raw := range app.RedirectUris {
+		if u, err := url.Parse(raw); err == nil {
+			urls = append(urls, u)
+		}
+	}
+	if len(urls) == 0 {
+		if u, err := url.Parse(app.CallbackURL); err == nil {
+			urls = append(urls, u)
+		}
+	}
+	return urls
+}
+
 // ShowAuthorizePage handles GET /oauth2/authorize requests to display the HTML authorization page.
 func ShowAuthorizePage(accessURL *url.URL) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
@@ -106,7 +124,7 @@ func ShowAuthorizePage(accessURL *url.URL) http.HandlerFunc {
 			return
 		}
 
-		params, validationErrs, err := extractAuthorizeParams(r, callbackURL)
+		params, validationErrs, err := extractAuthorizeParams(r, callbackURL, registeredRedirectURLs(app))
 		if err != nil {
 			errStr := make([]string, len(validationErrs))
 			for i, err := range validationErrs {
@@ -197,7 +215,7 @@ func ProcessAuthorize(db database.Store) http.HandlerFunc {
 			return
 		}
 
-		params, _, err := extractAuthorizeParams(r, callbackURL)
+		params, _, err := extractAuthorizeParams(r, callbackURL, registeredRedirectURLs(app))
 		if err != nil {
 			httpapi.WriteOAuth2Error(ctx, rw, http.StatusBadRequest, codersdk.OAuth2ErrorCodeInvalidRequest, err.Error())
 			return

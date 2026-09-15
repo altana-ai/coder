@@ -39,7 +39,7 @@ var (
 	errConflictingClientAuth = xerrors.New("conflicting client authentication")
 )
 
-func extractTokenRequest(r *http.Request, callbackURL *url.URL) (codersdk.OAuth2TokenRequest, []codersdk.ValidationError, error) {
+func extractTokenRequest(r *http.Request, callbackURL *url.URL, allowedRedirectURLs []*url.URL) (codersdk.OAuth2TokenRequest, []codersdk.ValidationError, error) {
 	p := httpapi.NewQueryParamParser()
 	err := r.ParseForm()
 	if err != nil {
@@ -99,8 +99,8 @@ func extractTokenRequest(r *http.Request, callbackURL *url.URL) (codersdk.OAuth2
 		}
 	}
 
-	// Validate redirect URI - errors are added to p.Errors.
-	_ = p.RedirectURL(vals, callbackURL, "redirect_uri")
+	// Validate redirect URI against the full registered set - errors are added to p.Errors.
+	_ = p.RedirectURLMatchingAny(vals, callbackURL, allowedRedirectURLs, "redirect_uri")
 
 	// Validate resource parameter syntax (RFC 8707): must be absolute URI without fragment.
 	if err := validateResourceParameter(req.Resource); err != nil {
@@ -134,7 +134,7 @@ func Tokens(db database.Store, lifetimes codersdk.SessionLifetime) http.HandlerF
 			return
 		}
 
-		req, validationErrs, err := extractTokenRequest(r, callbackURL)
+		req, validationErrs, err := extractTokenRequest(r, callbackURL, registeredRedirectURLs(app))
 		if err != nil {
 			if errors.Is(err, errConflictingClientAuth) {
 				httpapi.WriteOAuth2Error(ctx, rw, http.StatusBadRequest, codersdk.OAuth2ErrorCodeInvalidRequest, "Conflicting client credentials between Authorization header and request body")
