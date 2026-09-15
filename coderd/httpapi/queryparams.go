@@ -239,6 +239,35 @@ func (p *QueryParamParser) RedirectURL(vals url.Values, base *url.URL, queryPara
 	return v
 }
 
+// RedirectURLMatchingAny parses a redirect URI query param and requires it to
+// exactly match one of the client's registered redirect URIs. OAuth 2.0/2.1
+// validate redirect_uri against the full registered set, not a single primary,
+// so a public client (e.g. one registering a loopback callback alongside a
+// custom scheme) can use any URI it registered. When the param is absent it
+// defaults to base (the primary registered URI).
+func (p *QueryParamParser) RedirectURLMatchingAny(vals url.Values, base *url.URL, allowed []*url.URL, queryParam string) *url.URL {
+	v, err := parseQueryParam(p, vals, url.Parse, base, queryParam)
+	if err != nil {
+		p.Errors = append(p.Errors, codersdk.ValidationError{
+			Field:  queryParam,
+			Detail: fmt.Sprintf("Query param %q must be a valid url: %s", queryParam, err.Error()),
+		})
+		return v
+	}
+
+	for _, a := range allowed {
+		if a != nil && v.String() == a.String() {
+			return v
+		}
+	}
+
+	p.Errors = append(p.Errors, codersdk.ValidationError{
+		Field:  queryParam,
+		Detail: fmt.Sprintf("Query param %q must exactly match one of the registered redirect URIs", queryParam),
+	})
+	return v
+}
+
 func (p *QueryParamParser) Time(vals url.Values, def time.Time, queryParam, layout string) time.Time {
 	return p.timeWithMutate(vals, def, queryParam, layout, nil)
 }
