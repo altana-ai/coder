@@ -10,13 +10,13 @@ import (
 
 // RFC 7591 validation functions for Dynamic Client Registration
 
-func (req *OAuth2ClientRegistrationRequest) Validate() error {
+func (req *OAuth2ClientRegistrationRequest) Validate(allowedNativeRedirectSchemes ...string) error {
 	// Validate redirect URIs - required for authorization code flow
 	if len(req.RedirectURIs) == 0 {
 		return xerrors.New("redirect_uris is required for authorization code flow")
 	}
 
-	if err := validateRedirectURIs(req.RedirectURIs, req.TokenEndpointAuthMethod); err != nil {
+	if err := validateRedirectURIs(req.RedirectURIs, req.TokenEndpointAuthMethod, allowedNativeRedirectSchemes); err != nil {
 		return xerrors.Errorf("invalid redirect_uris: %w", err)
 	}
 
@@ -119,7 +119,7 @@ func validateScheme(u *url.URL) error {
 }
 
 // validateRedirectURIs validates redirect URIs according to RFC 7591, 8252
-func validateRedirectURIs(uris []string, tokenEndpointAuthMethod OAuth2TokenEndpointAuthMethod) error {
+func validateRedirectURIs(uris []string, tokenEndpointAuthMethod OAuth2TokenEndpointAuthMethod, allowedNativeRedirectSchemes []string) error {
 	if len(uris) == 0 {
 		return xerrors.New("at least one redirect URI is required")
 	}
@@ -168,7 +168,7 @@ func validateRedirectURIs(uris []string, tokenEndpointAuthMethod OAuth2TokenEndp
 			if isPublicClient {
 				// For public clients, custom schemes should follow RFC 8252 recommendations
 				// Should be reverse domain notation based on domain under their control
-				if !isValidCustomScheme(uri.Scheme) {
+				if !isValidCustomScheme(uri.Scheme, allowedNativeRedirectSchemes) {
 					return xerrors.Errorf("redirect URI at index %d: custom scheme %s should use reverse domain notation (e.g. com.example.app)", i, uri.Scheme)
 				}
 			}
@@ -296,8 +296,16 @@ func isLoopbackAddress(hostname string) bool {
 		hostname == "::1"
 }
 
-// isValidCustomScheme validates custom schemes for public clients (RFC 8252)
-func isValidCustomScheme(scheme string) bool {
+// isValidCustomScheme validates custom schemes for public clients (RFC 8252).
+// Schemes in allowedNativeRedirectSchemes are permitted verbatim so an operator
+// can opt a fixed-scheme client (e.g. Cursor's cursor://) past the default rule.
+func isValidCustomScheme(scheme string, allowedNativeRedirectSchemes []string) bool {
+	for _, allowed := range allowedNativeRedirectSchemes {
+		if strings.EqualFold(scheme, allowed) {
+			return true
+		}
+	}
+
 	// For security and RFC compliance, require reverse domain notation
 	// Should contain at least one period and not be a well-known scheme
 	if !strings.Contains(scheme, ".") {

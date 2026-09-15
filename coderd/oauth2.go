@@ -202,7 +202,7 @@ func (api *API) oauth2ProtectedResourceMetadata() http.HandlerFunc {
 // @Success 201 {object} codersdk.OAuth2ClientRegistrationResponse
 // @Router /oauth2/register [post]
 func (api *API) postOAuth2ClientRegistration() http.HandlerFunc {
-	return oauth2provider.CreateDynamicClientRegistration(api.Database, api.AccessURL, api.Auditor.Load(), api.Logger)
+	return oauth2provider.CreateDynamicClientRegistration(api.Database, api.AccessURL, api.Auditor.Load(), api.Logger, api.DeploymentValues.OAuth2.AllowedNativeRedirectSchemes.Value())
 }
 
 // @Summary Get OAuth2 client configuration (RFC 7592)
@@ -227,7 +227,7 @@ func (api *API) oauth2ClientConfiguration() http.HandlerFunc {
 // @Success 200 {object} codersdk.OAuth2ClientConfiguration
 // @Router /oauth2/clients/{client_id} [put]
 func (api *API) putOAuth2ClientConfiguration() http.HandlerFunc {
-	return oauth2provider.UpdateClientConfiguration(api.Database, api.Auditor.Load(), api.Logger)
+	return oauth2provider.UpdateClientConfiguration(api.Database, api.Auditor.Load(), api.Logger, api.DeploymentValues.OAuth2.AllowedNativeRedirectSchemes.Value())
 }
 
 // @Summary Delete OAuth2 client registration (RFC 7592)

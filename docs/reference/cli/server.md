@@ -355,6 +355,16 @@ Serve pprof metrics on the address defined by pprof address.
 
 The bind address to serve pprof.
 
+### --oauth2-allowed-native-redirect-schemes
+
+|             |                                                            |
+|-------------|------------------------------------------------------------|
+| Type        | <code>string-array</code>                                  |
+| Environment | <code>$CODER_OAUTH2_ALLOWED_NATIVE_REDIRECT_SCHEMES</code> |
+| YAML        | <code>oauth2.allowedNativeRedirectSchemes</code>           |
+
+Custom URI schemes permitted as native OAuth2 redirect URIs during dynamic client registration, beyond the reverse-domain-notation schemes allowed by default. Set to a bare scheme such as "cursor" to allow a public client whose fixed callback scheme (e.g. cursor://) is not reverse-domain notation. Empty keeps strict RFC 8252 validation.
+
 ### --oauth2-github-client-id
 
 |             |                                             |

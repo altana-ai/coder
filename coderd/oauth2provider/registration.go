@@ -26,7 +26,7 @@ import (
 )
 
 // CreateDynamicClientRegistration returns an http.HandlerFunc that handles POST /oauth2/register
-func CreateDynamicClientRegistration(db database.Store, accessURL *url.URL, auditor *audit.Auditor, logger slog.Logger) http.HandlerFunc {
+func CreateDynamicClientRegistration(db database.Store, accessURL *url.URL, auditor *audit.Auditor, logger slog.Logger, allowedNativeRedirectSchemes []string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		aReq, commitAudit := audit.InitRequest[database.OAuth2ProviderApp](rw, &audit.RequestParams{
@@ -44,7 +44,7 @@ func CreateDynamicClientRegistration(db database.Store, accessURL *url.URL, audi
 		}
 
 		// Validate request
-		if err := req.Validate(); err != nil {
+		if err := req.Validate(allowedNativeRedirectSchemes...); err != nil {
 			writeOAuth2RegistrationError(ctx, rw, http.StatusBadRequest,
 				"invalid_client_metadata", err.Error())
 			return
@@ -232,7 +232,7 @@ func GetClientConfiguration(db database.Store) http.HandlerFunc {
 }
 
 // UpdateClientConfiguration returns an http.HandlerFunc that handles PUT /oauth2/clients/{client_id}
-func UpdateClientConfiguration(db database.Store, auditor *audit.Auditor, logger slog.Logger) http.HandlerFunc {
+func UpdateClientConfiguration(db database.Store, auditor *audit.Auditor, logger slog.Logger, allowedNativeRedirectSchemes []string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		aReq, commitAudit := audit.InitRequest[database.OAuth2ProviderApp](rw, &audit.RequestParams{
@@ -259,7 +259,7 @@ func UpdateClientConfiguration(db database.Store, auditor *audit.Auditor, logger
 		}
 
 		// Validate request
-		if err := req.Validate(); err != nil {
+		if err := req.Validate(allowedNativeRedirectSchemes...); err != nil {
 			writeOAuth2RegistrationError(ctx, rw, http.StatusBadRequest,
 				"invalid_client_metadata", err.Error())
 			return

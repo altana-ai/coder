@@ -911,6 +911,10 @@ type PprofConfig struct {
 
 type OAuth2Config struct {
 	Github OAuth2GithubConfig `json:"github" typescript:",notnull"`
+	// AllowedNativeRedirectSchemes permits specific bare custom URI schemes
+	// (e.g. "cursor") as native redirect targets during dynamic client
+	// registration, which RFC 8252 reverse-domain validation rejects by default.
+	AllowedNativeRedirectSchemes serpent.StringArray `json:"allowed_native_redirect_schemes" typescript:",notnull"`
 }
 
 type OAuth2GithubConfig struct {
@@ -2610,6 +2614,15 @@ communicating directly.`,
 			Annotations: serpent.Annotations{}.Mark(annotationExternalProxies, "true"),
 		},
 		// oAuth settings
+		{
+			Name:        "OAuth2 Allowed Native Redirect Schemes",
+			Description: "Custom URI schemes permitted as native OAuth2 redirect URIs during dynamic client registration, beyond the reverse-domain-notation schemes allowed by default. Set to a bare scheme such as \"cursor\" to allow a public client whose fixed callback scheme (e.g. cursor://) is not reverse-domain notation. Empty keeps strict RFC 8252 validation.",
+			Flag:        "oauth2-allowed-native-redirect-schemes",
+			Env:         "CODER_OAUTH2_ALLOWED_NATIVE_REDIRECT_SCHEMES",
+			Value:       &c.OAuth2.AllowedNativeRedirectSchemes,
+			Group:       &deploymentGroupOAuth2,
+			YAML:        "allowedNativeRedirectSchemes",
+		},
 		{
 			Name:        "OAuth2 GitHub Client ID",
 			Description: "Client ID for Login with GitHub.",
