@@ -127,7 +127,7 @@ func TestExtractTokenParams_Scopes(t *testing.T) {
 			}
 
 			// Extract token request
-			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL)
+			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL, []*url.URL{callbackURL})
 
 			// Verify no errors occurred
 			require.NoError(t, err, "extractTokenRequest should not return error for: %s", tc.description)
@@ -190,7 +190,7 @@ func TestExtractTokenParams_ScopesURLEncoded(t *testing.T) {
 			}
 
 			// Extract token request
-			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL)
+			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL, []*url.URL{callbackURL})
 
 			// Verify no errors
 			require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestExtractTokenParams_ScopesEdgeCases(t *testing.T) {
 				Form:     form,
 			}
 
-			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL)
+			tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL, []*url.URL{callbackURL})
 
 			require.NoError(t, err, "extractTokenRequest should not error for: %s", tc.description)
 			require.Empty(t, validationErrs)
@@ -343,7 +343,7 @@ func TestExtractAuthorizeParams_Scopes(t *testing.T) {
 			}
 
 			// Extract authorize params
-			params, validationErrs, err := extractAuthorizeParams(req, callbackURL)
+			params, validationErrs, err := extractAuthorizeParams(req, callbackURL, []*url.URL{callbackURL})
 
 			require.NoError(t, err)
 			require.Empty(t, validationErrs)
@@ -407,7 +407,7 @@ func TestExtractAuthorizeParams_CodeChallengeFormat(t *testing.T) {
 				URL:    reqURL,
 			}
 
-			_, validationErrs, err := extractAuthorizeParams(req, callbackURL)
+			_, validationErrs, err := extractAuthorizeParams(req, callbackURL, []*url.URL{callbackURL})
 			if tc.expectValid {
 				require.NoError(t, err)
 				require.Empty(t, validationErrs)
@@ -418,6 +418,55 @@ func TestExtractAuthorizeParams_CodeChallengeFormat(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractAuthorizeParams_RedirectURIMatchesAnyRegistered proves the authorize
+// redirect_uri is validated against the full registered set, not just the primary
+// callback: Cursor registers a loopback alongside its custom scheme (DX-3263).
+func TestExtractAuthorizeParams_RedirectURIMatchesAnyRegistered(t *testing.T) {
+	t.Parallel()
+
+	primary, err := url.Parse("cursor://anysphere.cursor-mcp/oauth/callback")
+	require.NoError(t, err)
+	loopback, err := url.Parse("http://localhost:8787/callback")
+	require.NoError(t, err)
+	allowed := []*url.URL{primary, loopback}
+
+	newReq := func(redirectURI string) *http.Request {
+		query := url.Values{}
+		query.Set("response_type", "code")
+		query.Set("client_id", "test-client")
+		query.Set("code_challenge", strings.Repeat("a", 43))
+		if redirectURI != "" {
+			query.Set("redirect_uri", redirectURI)
+		}
+		reqURL, err := url.Parse("http://localhost:8080/oauth2/authorize?" + query.Encode())
+		require.NoError(t, err)
+		return &http.Request{Method: http.MethodGet, URL: reqURL}
+	}
+
+	t.Run("RegisteredNonPrimary", func(t *testing.T) {
+		t.Parallel()
+		params, validationErrs, err := extractAuthorizeParams(newReq("http://localhost:8787/callback"), primary, allowed)
+		require.NoError(t, err)
+		require.Empty(t, validationErrs)
+		require.Equal(t, "http://localhost:8787/callback", params.redirectURL.String())
+	})
+
+	t.Run("Unregistered", func(t *testing.T) {
+		t.Parallel()
+		_, validationErrs, err := extractAuthorizeParams(newReq("http://localhost:9999/callback"), primary, allowed)
+		require.Error(t, err)
+		require.NotEmpty(t, validationErrs)
+	})
+
+	t.Run("AbsentDefaultsToPrimary", func(t *testing.T) {
+		t.Parallel()
+		params, validationErrs, err := extractAuthorizeParams(newReq(""), primary, allowed)
+		require.NoError(t, err)
+		require.Empty(t, validationErrs)
+		require.Equal(t, primary.String(), params.redirectURL.String())
+	})
 }
 
 // TestExtractAuthorizeParams_TokenResponseTypeDoesNotRequirePKCE ensures
@@ -442,7 +491,7 @@ func TestExtractAuthorizeParams_TokenResponseTypeDoesNotRequirePKCE(t *testing.T
 		URL:    reqURL,
 	}
 
-	params, validationErrs, err := extractAuthorizeParams(req, callbackURL)
+	params, validationErrs, err := extractAuthorizeParams(req, callbackURL, []*url.URL{callbackURL})
 	require.NoError(t, err)
 	require.Empty(t, validationErrs)
 	require.Equal(t, codersdk.OAuth2ProviderResponseTypeToken, params.responseType)
@@ -468,7 +517,7 @@ func TestRefreshTokenGrant_Scopes(t *testing.T) {
 		Form:     form,
 	}
 
-	tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL)
+	tokenReq, validationErrs, err := extractTokenRequest(req, callbackURL, []*url.URL{callbackURL})
 
 	require.NoError(t, err)
 	require.Empty(t, validationErrs)
