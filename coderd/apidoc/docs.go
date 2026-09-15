@@ -21809,6 +21809,12 @@ const docTemplate = `{
         "codersdk.OAuth2Config": {
             "type": "object",
             "properties": {
+                "allowed_native_redirect_schemes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "github": {
                     "$ref": "#/definitions/codersdk.OAuth2GithubConfig"
                 }

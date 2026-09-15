@@ -6346,6 +6346,7 @@ export interface OAuth2ClientRegistrationResponse {
 // From codersdk/deployment.go
 export interface OAuth2Config {
 	readonly github: OAuth2GithubConfig;
+	readonly allowed_native_redirect_schemes: string;
 }
 
 // From codersdk/oauth2.go

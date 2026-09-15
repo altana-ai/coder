@@ -724,6 +724,16 @@ NOTIFICATIONS / WEBHOOK OPTIONS:
       --notifications-webhook-endpoint url, $CODER_NOTIFICATIONS_WEBHOOK_ENDPOINT
           The endpoint to which to send webhooks.
 
+OAUTH2 OPTIONS: 
+Configure login and user-provisioning with GitHub via oAuth2.
+
+      --oauth2-allowed-native-redirect-schemes string-array, $CODER_OAUTH2_ALLOWED_NATIVE_REDIRECT_SCHEMES
+          Custom URI schemes permitted as native OAuth2 redirect URIs during
+          dynamic client registration, beyond the reverse-domain-notation
+          schemes allowed by default. Set to a bare scheme such as "cursor" to
+          allow a public client whose fixed callback scheme (e.g. cursor://) is
+          not reverse-domain notation. Empty keeps strict RFC 8252 validation.
+
 OAUTH2 / GITHUB OPTIONS: 
       --oauth2-github-allow-everyone bool, $CODER_OAUTH2_GITHUB_ALLOW_EVERYONE
           Allow all logins, setting this option means allowed orgs and teams

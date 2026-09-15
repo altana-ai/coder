@@ -12,6 +12,7 @@ import (
 	"github.com/coder/coder/v2/coderd/coderdtest"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/testutil"
+	"github.com/coder/serpent"
 )
 
 // TestOAuth2ClientMetadataValidation tests enhanced metadata validation per RFC 7591
@@ -762,5 +763,45 @@ func TestOAuth2ClientMetadataEdgeCases(t *testing.T) {
 
 		_, err := client.PostOAuth2ClientRegistration(ctx, req)
 		require.NoError(t, err)
+	})
+}
+
+// TestOAuth2AllowedNativeRedirectSchemes proves the CODER_OAUTH2_ALLOWED_NATIVE_REDIRECT_SCHEMES
+// deployment option threads into dynamic client registration: a listed bare
+// scheme registers, an unlisted one is still rejected.
+func TestOAuth2AllowedNativeRedirectSchemes(t *testing.T) {
+	t.Parallel()
+
+	dv := coderdtest.DeploymentValues(t, func(dv *codersdk.DeploymentValues) {
+		dv.OAuth2.AllowedNativeRedirectSchemes = serpent.StringArray{"cursor"}
+	})
+	client := coderdtest.New(t, &coderdtest.Options{DeploymentValues: dv})
+	_ = coderdtest.CreateFirstUser(t, client)
+
+	// Cursor registers as a public client (token_endpoint_auth_method=none);
+	// that is the path the reverse-domain rule guards.
+	t.Run("ListedSchemeRegisters", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := client.PostOAuth2ClientRegistration(ctx, codersdk.OAuth2ClientRegistrationRequest{
+			RedirectURIs:            []string{"cursor://anysphere.cursor-mcp/oauth/callback"},
+			ClientName:              fmt.Sprintf("cursor-%d", time.Now().UnixNano()),
+			TokenEndpointAuthMethod: codersdk.OAuth2TokenEndpointAuthMethodNone,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("UnlistedSchemeRejected", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := client.PostOAuth2ClientRegistration(ctx, codersdk.OAuth2ClientRegistrationRequest{
+			RedirectURIs:            []string{"vscode://callback"},
+			ClientName:              fmt.Sprintf("vscode-%d", time.Now().UnixNano()),
+			TokenEndpointAuthMethod: codersdk.OAuth2TokenEndpointAuthMethodNone,
+		})
+		require.Error(t, err)
+		require.Contains(t, strings.ToLower(err.Error()), "reverse domain notation")
 	})
 }
