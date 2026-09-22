@@ -70,7 +70,7 @@ replace github.com/charmbracelet/bubbletea => github.com/coder/bubbletea v1.2.2-
 
 // Trivy has some issues that we're floating patches for, and will hopefully
 // be upstreamed eventually.
-replace github.com/aquasecurity/trivy => github.com/altana-ai/trivy v0.0.0-20260902222948-fc995ac52477
+replace github.com/aquasecurity/trivy => github.com/altana-ai/trivy v0.0.0-20260922222258-86c30051c881
 
 // afero/tarfs has a bug that breaks our usage. A PR has been submitted upstream.
 // https://github.com/spf13/afero/pull/487
