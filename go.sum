@@ -135,8 +135,8 @@ github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74 h1:Kk6a4nehpJ3Uu
 github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
 github.com/altana-ai/preview v1.0.10-0.20260902212439-0b467d603888 h1:RnqbNZi8kzuR069Um3kO9DKMK2zqVYWdlHLM1Eoq5R0=
 github.com/altana-ai/preview v1.0.10-0.20260902212439-0b467d603888/go.mod h1:49I1oau+6Ay5U6l7I6l7Mr59FQUPdGpIWaNfZHfJZwo=
-github.com/altana-ai/trivy v0.0.0-20260902222948-fc995ac52477 h1:ybL46EAjStsiFWais4BqAeGLT+kIlLDha+QlMJq2D1A=
-github.com/altana-ai/trivy v0.0.0-20260902222948-fc995ac52477/go.mod h1:+zF17ZBOdhFWwD3+GkLxZ/vkmKLudoOtt+hgnc1TQpA=
+github.com/altana-ai/trivy v0.0.0-20260922222258-86c30051c881 h1:oF4vTQqcHfs+221tqnJc1UkJ234X32EiYmPQQMLXobs=
+github.com/altana-ai/trivy v0.0.0-20260922222258-86c30051c881/go.mod h1:+zF17ZBOdhFWwD3+GkLxZ/vkmKLudoOtt+hgnc1TQpA=
 github.com/ammario/tlru v0.4.0 h1:sJ80I0swN3KOX2YxC6w8FbCqpQucWdbb+J36C05FPuU=
 github.com/ammario/tlru v0.4.0/go.mod h1:aYzRFu0XLo4KavE9W8Lx7tzjkX+pAApz+NgcKYIFUBQ=
 github.com/andybalholm/brotli v1.2.1 h1:R+f5xP285VArJDRgowrfb9DqL18yVK0gKAW/F+eTWro=
