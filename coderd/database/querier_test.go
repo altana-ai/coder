@@ -15099,3 +15099,33 @@ func requireAIGatewayKeysViolation(
 		require.FailNow(t, "test case must expect a constraint error")
 	}
 }
+
+func TestGetPresetsBackoffScheduleOnlyPreset(t *testing.T) {
+	t.Parallel()
+
+	now := dbtime.Now()
+	orgID := uuid.New()
+	userID := uuid.New()
+	db, _ := dbtestutil.NewDB(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	dbgen.Organization(t, db, database.Organization{ID: orgID})
+	dbgen.User(t, db, database.User{ID: userID})
+
+	tmpl := createTemplate(t, db, orgID, userID)
+	tmplV1 := createTmplVersionAndPreset(t, db, tmpl, tmpl.ActiveVersionID, now, &tmplVersionOpts{DesiredInstances: 0})
+	dbgen.PresetPrebuildSchedule(t, db, database.InsertPresetPrebuildScheduleParams{
+		PresetID:         tmplV1.preset.ID,
+		CronExpression:   "* * * * *",
+		DesiredInstances: 2,
+	})
+	createPrebuiltWorkspace(ctx, t, db, tmpl, tmplV1, orgID, now, &createPrebuiltWorkspaceOpts{
+		failedJob: true,
+		createdAt: now,
+	})
+
+	backoffs, err := db.GetPresetsBackoff(ctx, now.Add(-time.Hour))
+	require.NoError(t, err)
+	require.Len(t, backoffs, 1)
+	require.Equal(t, tmplV1.preset.ID, backoffs[0].PresetID)
+	require.Equal(t, int32(1), backoffs[0].NumFailed)
+}
