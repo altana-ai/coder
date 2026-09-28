@@ -6483,6 +6483,7 @@ func createTmplVersionAndPreset(
 
 type createPrebuiltWorkspaceOpts struct {
 	failedJob      bool
+	succeededJob   bool
 	createdAt      time.Time
 	readyAgents    int
 	notReadyAgents int
@@ -6503,12 +6504,19 @@ func createPrebuiltWorkspace(
 	if opts != nil && opts.failedJob {
 		jobError = sql.NullString{String: "failed", Valid: true}
 	}
+	var jobStartedAt, jobCompletedAt sql.NullTime
+	if opts != nil && opts.succeededJob {
+		jobStartedAt = sql.NullTime{Time: now.Add(-1 * time.Minute), Valid: true}
+		jobCompletedAt = sql.NullTime{Time: now, Valid: true}
+	}
 	job := dbgen.ProvisionerJob(t, db, nil, database.ProvisionerJob{
 		Type:           database.ProvisionerJobTypeWorkspaceBuild,
 		OrganizationID: orgID,
 
-		CreatedAt: now.Add(-1 * time.Minute),
-		Error:     jobError,
+		CreatedAt:   now.Add(-1 * time.Minute),
+		StartedAt:   jobStartedAt,
+		CompletedAt: jobCompletedAt,
+		Error:       jobError,
 	})
 
 	// create ready agents
@@ -7285,8 +7293,9 @@ func TestGetPresetsAtFailureLimit(t *testing.T) {
 			tmplV1 := createTmplVersionAndPreset(t, db, tmpl, tmpl.ActiveVersionID, now, nil)
 			for idx, buildSuccess := range tc.buildSuccesses {
 				createPrebuiltWorkspace(ctx, t, db, tmpl, tmplV1, orgID, now, &createPrebuiltWorkspaceOpts{
-					failedJob: !buildSuccess,
-					createdAt: hourBefore.Add(time.Duration(idx) * time.Second),
+					failedJob:    !buildSuccess,
+					succeededJob: buildSuccess,
+					createdAt:    hourBefore.Add(time.Duration(idx) * time.Second),
 				})
 			}
 
@@ -15128,4 +15137,54 @@ func TestGetPresetsBackoffScheduleOnlyPreset(t *testing.T) {
 	require.Len(t, backoffs, 1)
 	require.Equal(t, tmplV1.preset.ID, backoffs[0].PresetID)
 	require.Equal(t, int32(1), backoffs[0].NumFailed)
+}
+
+func TestGetPresetsAtFailureLimitIgnoresInFlightBuilds(t *testing.T) {
+	t.Parallel()
+
+	now := dbtime.Now()
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	testCases := []struct {
+		name            string
+		inFlight        bool
+		expHitHardLimit bool
+	}{
+		{name: "failed builds only", expHitHardLimit: true},
+		{name: "newest build still in flight", inFlight: true, expHitHardLimit: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			db, _ := dbtestutil.NewDB(t)
+			ctx := testutil.Context(t, testutil.WaitShort)
+			dbgen.Organization(t, db, database.Organization{ID: orgID})
+			dbgen.User(t, db, database.User{ID: userID})
+
+			tmpl := createTemplate(t, db, orgID, userID)
+			tmplV1 := createTmplVersionAndPreset(t, db, tmpl, tmpl.ActiveVersionID, now, nil)
+			for i := range 3 {
+				createPrebuiltWorkspace(ctx, t, db, tmpl, tmplV1, orgID, now, &createPrebuiltWorkspaceOpts{
+					failedJob: true,
+					createdAt: now.Add(time.Duration(i-10) * time.Minute),
+				})
+			}
+			if tc.inFlight {
+				createPrebuiltWorkspace(ctx, t, db, tmpl, tmplV1, orgID, now, &createPrebuiltWorkspaceOpts{
+					createdAt: now,
+				})
+			}
+
+			hardLimitedPresets, err := db.GetPresetsAtFailureLimit(ctx, 3)
+			require.NoError(t, err)
+			if tc.expHitHardLimit {
+				require.Len(t, hardLimitedPresets, 1)
+				require.Equal(t, tmplV1.preset.ID, hardLimitedPresets[0].PresetID)
+			} else {
+				require.Empty(t, hardLimitedPresets)
+			}
+		})
+	}
 }
