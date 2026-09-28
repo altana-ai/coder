@@ -139,7 +139,7 @@ jobs:
           {
             echo "Altana build of Coder ${base}, linux/arm64 and linux/amd64."
             echo
-            echo "Built from \`${REF}\` at \`$GITHUB_SHA\`. Patches on top of upstream ${base}:"
+            echo "Built from \`${REF}\` at \`$(git rev-parse HEAD)\`. Patches on top of upstream ${base}:"
             echo
             git log --no-merges --reverse --format='- %s (%h)' "${base}..HEAD"
             echo
@@ -158,9 +158,10 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           fi
+          # GITHUB_SHA is the release-ci commit the workflow runs from, not the ref that was built.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$(git rev-parse HEAD)" \
             --title "$TAG" \
             --notes-file notes.md \
             "out/coder_${TAG}_linux_arm64" \
