@@ -99,17 +99,45 @@ jobs:
           #    fetch. coderd extracts these at runtime from the embedded
           #    bin/coder.tar.zst (validated against bin/coder.sha1) — see
           #    site/bin.go — so we must reproduce exactly what `make` bakes into
-          #    site/out/bin: slim per-platform binaries, sha1 checksum, then a
-          #    zstd tar, then delete the raw binaries. Slim builds need no protoc.
-          #    Must run AFTER pnpm build populates site/out.
-          mkdir -p site/out/bin
-          for t in linux:amd64 linux:arm64 darwin:amd64 darwin:arm64 windows:amd64; do
-            os="${t%%:*}"; arch="${t##*:}"; ext=""
-            [ "$os" = "windows" ] && ext=".exe"
-            CODER_SLIM_BUILD=1 ./scripts/build_go.sh --slim --os "$os" --arch "$arch" \
-              --version "$version" --output "site/out/bin/coder-${os}-${arch}${ext}"
+          #    site/out/bin: per-platform binaries, sha1 checksum, then a zstd
+          #    tar, then delete the raw files. Must run AFTER pnpm build
+          #    populates site/out.
+          #
+          #    These are upstream's signed slim binaries for the base version,
+          #    not ones we compile: the VS Code/Cursor extension verifies the
+          #    CLI it downloads against Coder's release key, which a binary we
+          #    build can never satisfy. Our patches are all server-side, so
+          #    the client and agent need nothing from this fork. Each binary
+          #    must verify against the pinned key or the build fails, and the
+          #    .asc ships beside it so /bin/<name>.asc serves the signature.
+          base="${version%%-*}"
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Cannot derive an upstream x.y.z base version from tag '$TAG'" >&2
+            exit 1
+          fi
+          key_fpr=21C96B1CB950718874F64DBD6A5A671B5E40A3B9
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
+          gpg --batch --quiet --import .github/coder-release-signing-key.asc
+          imported="$(gpg --batch --with-colons --fingerprint | awk -F: '$1 == "pub" { n++; want = 1; next } want && $1 == "fpr" { fpr = $10; want = 0 } END { if (n == 1) print fpr }')"
+          if [ "$imported" != "$key_fpr" ]; then
+            echo "Signing key fingerprint mismatch: got '$imported', want $key_fpr" >&2
+            exit 1
+          fi
+          gpg --batch --export "$key_fpr" > "$RUNNER_TEMP/coder-release.gpg"
+          mkdir -p site/out/bin out
+          clients=(coder-linux-amd64 coder-linux-arm64 coder-linux-armv7
+            coder-darwin-amd64 coder-darwin-arm64
+            coder-windows-amd64.exe coder-windows-arm64.exe)
+          for name in "${clients[@]}"; do
+            url="https://releases.coder.com/coder-cli/${base}/${name}"
+            curl -fsSL --retry 3 -o "site/out/bin/${name}" "$url"
+            curl -fsSL --retry 3 -o "site/out/bin/${name}.asc" "${url}.asc"
+            gpgv --keyring "$RUNNER_TEMP/coder-release.gpg" \
+              "site/out/bin/${name}.asc" "site/out/bin/${name}"
           done
           ( cd site/out/bin
+            sha256sum "${clients[@]}" > "$GITHUB_WORKSPACE/out/coder_${TAG}_client_sha256.txt"
             openssl dgst -r -sha1 coder-* | tee coder.sha1
             tar cf coder.tar coder-*
             zstd -22 --ultra --force --long --no-progress -o coder.tar.zst coder.tar
@@ -143,6 +171,10 @@ jobs:
             echo
             git log --no-merges --reverse --format='- %s (%h)' "${base}..HEAD"
             echo
+            echo "Client CLI and agent binaries served at /bin are upstream's signed ${base}"
+            echo "release, verified against Coder's release key at build time; their sha256s are"
+            echo "in \`coder_${TAG}_client_sha256.txt\`."
+            echo
             echo "- Go: \`$(go version | awk '{print $3}')\`"
             echo "- Workflow: [run ${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
           } > notes.md
@@ -167,4 +199,5 @@ jobs:
             "out/coder_${TAG}_linux_arm64" \
             "out/coder_${TAG}_linux_arm64.sha256" \
             "out/coder_${TAG}_linux_amd64" \
-            "out/coder_${TAG}_linux_amd64.sha256"
+            "out/coder_${TAG}_linux_amd64.sha256" \
+            "out/coder_${TAG}_client_sha256.txt"
