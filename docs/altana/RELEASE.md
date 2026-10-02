@@ -58,6 +58,16 @@ releases, driven entirely by inputs.
    whose assets match the existing convention: a bare binary
    `coder_<tag>_linux_<arch>` plus a `.sha256`.
 
+The client CLI and agent binaries the server serves at `/bin` are **not** built
+from the patch branch: the workflow downloads upstream's signed slim binaries
+for the tag's base version (`v2.35.7-altana.2` → `2.35.7`) from
+`releases.coder.com`, verifies each with `gpgv` against Coder's release key
+(`.github/coder-release-signing-key.asc`, fingerprint pinned in the workflow),
+and embeds them with their `.asc` signatures. The VS Code/Cursor extension
+verifies the CLI it downloads against that key, so a binary we compile always
+fails with "Signed digest did not match". This only works while every patch is
+server-side; patching CLI, agent, or SSH code would bring the warning back.
+
 Dev and prod can be on different versions: keep one `patch/altana-v<version>` branch per
 base, apply a new patch to each, and dispatch once each (e.g. `v2.36.4-altana.1` for dev,
 `v2.35.7-altana.1` for prod). `release-ci` never changes between versions.
