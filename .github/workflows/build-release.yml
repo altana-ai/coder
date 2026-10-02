@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch or tag to build (e.g. dynamic-params-closure-v2.35.4)."
+        description: "Branch or tag to build (e.g. patch/altana-v2.35.7)."
         required: true
         type: string
       tag:
-        description: "Release tag to publish (e.g. v2.35.4-param-closure)."
+        description: "Release tag to publish, v<upstream version>-altana.<n> (e.g. v2.35.7-altana.1)."
         required: true
         type: string
       force:
@@ -42,6 +42,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+          # Full history, so the release notes can list the patches since the upstream tag.
+          fetch-depth: 0
 
       - name: Skip if a release already exists for the tag
         id: resolve
@@ -125,15 +127,21 @@ jobs:
 
       - name: Write release notes
         if: steps.resolve.outputs.exists == 'false' || inputs.force
+        env:
+          TAG: ${{ inputs.tag }}
+          REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
+          base="${TAG#v}"
+          base="v${base%%-*}"
+          # The fork does not mirror upstream tags, so fetch the base tag to diff against.
+          git fetch --no-tags https://github.com/coder/coder.git "refs/tags/${base}:refs/tags/${base}"
           {
-            echo "Altana build of the Coder server, linux/arm64."
+            echo "Altana build of Coder ${base}, linux/arm64 and linux/amd64."
             echo
-            echo "Built from this fork at \`$GITHUB_SHA\` with go.mod replaces pinning Altana's"
-            echo "patched coder/preview and coder/trivy (the dynamic-parameters preview"
-            echo "performance change). The frontend is embedded; the asset is the upstream"
-            echo "release shape (coder_<version>_linux_arm64.tar.gz)."
+            echo "Built from \`${REF}\` at \`$(git rev-parse HEAD)\`. Patches on top of upstream ${base}:"
+            echo
+            git log --no-merges --reverse --format='- %s (%h)' "${base}..HEAD"
             echo
             echo "- Go: \`$(go version | awk '{print $3}')\`"
             echo "- Workflow: [run ${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
@@ -150,10 +158,11 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           fi
+          # GITHUB_SHA is the release-ci commit the workflow runs from, not the ref that was built.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG: dynamic parameters render only the parameter closure" \
+            --target "$(git rev-parse HEAD)" \
+            --title "$TAG" \
             --notes-file notes.md \
             "out/coder_${TAG}_linux_arm64" \
             "out/coder_${TAG}_linux_arm64.sha256" \
