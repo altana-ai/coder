@@ -118,7 +118,10 @@ jobs:
           key_fpr=21C96B1CB950718874F64DBD6A5A671B5E40A3B9
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
           mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
-          gpg --batch --quiet --import .github/coder-release-signing-key.asc
+          # The checkout is the patch ref, so read the key from the workflow's own commit.
+          git fetch --no-tags --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git show "${GITHUB_SHA}:.github/coder-release-signing-key.asc" > "$RUNNER_TEMP/coder-release-key.asc"
+          gpg --batch --quiet --import "$RUNNER_TEMP/coder-release-key.asc"
           imported="$(gpg --batch --with-colons --fingerprint | awk -F: '$1 == "pub" { n++; want = 1; next } want && $1 == "fpr" { fpr = $10; want = 0 } END { if (n == 1) print fpr }')"
           if [ "$imported" != "$key_fpr" ]; then
             echo "Signing key fingerprint mismatch: got '$imported', want $key_fpr" >&2
