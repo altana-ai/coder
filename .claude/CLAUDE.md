@@ -1,15 +1,16 @@
 # Altana fork rules
 
-This repo is Altana's fork of `coder/coder`. The root `CLAUDE.md` and `AGENTS.md` are upstream's and still apply. This file adds the fork's own rules. It lives on `release-ci` only; patch branches are cut from upstream tags and do not carry it.
+This repo is Altana's fork of `coder/coder`. The root `CLAUDE.md` and `AGENTS.md` are upstream's and still apply. This file adds the fork's own rules.
 
-- **Branches**: read [docs/altana/RELEASE.md](../docs/altana/RELEASE.md) before any change. Never commit to `main`, which mirrors upstream.
-  - Patches go on `patch/altana-v<version>`, one commit per patch.
-  - `release-ci` holds only the build workflow and these docs.
-- **Which branch to patch**: the newest `patch/altana-v<version>` (check `gh release list --repo altana-ai/coder`). Port to an older branch only for an environment still running it.
-- **Reviewing a patch**: open a pull request against the patch branch, so the patch is reviewed as a single commit.
-- **Patch ledger**: every pull request that adds, ports or drops a patch also updates [docs/altana/PATCHES.md](../docs/altana/PATCHES.md), through its own pull request to `release-ci`.
-  - Record the commit, its kind (altana, backport or pin), and its upstream status.
-  - An upgrade starts from the ledger. Drop backports the new upstream tag already contains, and re-port Altana patches by hand where upstream code has moved.
-- **Releases**: built by the `build-release` GitHub workflow on `release-ci`, dispatched by hand with `-f ref=<patch branch> -f tag=v<version>-altana.<n>`. A merge publishes nothing.
-  - Patches must stay server-side. The signed client binaries come from upstream, so a client or agent patch breaks the VS Code extension's signature check.
-- **Consumers**: the monorepo installs a release by `coder_version` in `apps/terraform/applications/coder/config/<env>.tfvars`. A release reaches prod only through a monorepo pull request.
+It lives on `release-ci` only. Patch branches are cut from upstream tags and do not carry it, so the monorepo runbook links here.
+
+- **Process**: the monorepo runbook [`docs/coder/admin/coder-fork-upgrade.md`](https://github.com/altana-tech/monorepo/blob/main/docs/coder/admin/coder-fork-upgrade.md) is the one written process, for adding a patch and for upgrading. The branch model and release workflow are in [docs/altana/RELEASE.md](../docs/altana/RELEASE.md). Follow those; do not restate them here.
+- **Which branch to patch**: the one prod runs. That is the upstream part of `coder_version` in the monorepo's `apps/terraform/applications/coder/config/production.tfvars`, not the newest release. During an upgrade, the newest branch may only be on dev.
+- **Never commit to `main`**, which mirrors upstream.
+- **Patch commits**: one per patch, server-side only, each ending in a trailer:
+  - `Upstream-Commit: <sha>` for a backport;
+  - `Upstream-PR: coder/coder#<n>` for our patch proposed upstream;
+  - or `Upstream-PR: none` with the reason in the body.
+- **Merging**: open a PR into the patch branch and merge with rebase, never squash.
+- **Releasing**: release only after the merge, as the next `v<version>-altana.<n>`. Never reuse a tag.
+- **Ledger**: after a patch merges, or an upgrade drops one, update [docs/altana/PATCHES.md](../docs/altana/PATCHES.md) on `release-ci`, recording any drop with its reason.
