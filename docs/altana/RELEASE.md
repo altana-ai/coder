@@ -14,7 +14,7 @@ by keeping the three concerns on separate branches.
 | Branch | What it is | Rule |
 | --- | --- | --- |
 | `main` | Exact mirror of `coder/coder:main` | **Never commit here.** Fast-forward-sync from upstream only. This is the clean base everything rebases onto. |
-| `release-ci` | Repo **default branch**. `main` plus one file: `.github/workflows/build-release.yml` | Holds the build tooling only. GitHub requires a dispatchable workflow to live on the default branch, which is the only reason anything custom sits here. |
+| `release-ci` | Repo **default branch**. `main` plus the build workflow (`.github/workflows/build-release.yml`), Coder's release signing key (`.github/coder-release-signing-key.asc`), the fork docs (`docs/altana/`) and the agent rules (`.claude/CLAUDE.md`) | Holds the build tooling and fork docs only. GitHub requires a dispatchable workflow to live on the default branch, which is why anything custom sits here. None of these files exist upstream, so merging `main` in stays conflict-free. |
 | `patch/altana-v<version>` | One upstream release tag (`v<version>`) plus every patch we carry, one commit per patch | What we build. Cut from a `coder/coder` tag. Each commit is also what we PR upstream, so keep them independent. |
 
 Preview/trivy changes ride along in the Coder build via `go.mod` replaces on the

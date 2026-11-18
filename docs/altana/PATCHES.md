@@ -1,48 +1,34 @@
 # Altana Coder fork: patch ledger
 
-Every commit we carry on a `patch/altana-v<version>` branch, and where it came from. An upgrade
-starts here: drop every row upstream already ships in the new base, then re-apply the rest.
-Branch model and release steps: [RELEASE.md](RELEASE.md).
+What each `patch/altana-v<version>` branch carries, and why each dropped patch was dropped. A
+dropped commit never appears in `git log` on the next branch, so this file is the only place its
+reason survives.
 
-## Kinds
+The facts an agent needs to carry or drop a patch come from the patch commit's trailer
+(`Upstream-Commit: <sha>`, `Upstream-PR: coder/coder#<n>`, or `Upstream-PR: none` with a reason).
+This file is the human summary and the drop history. The upgrade process is written once, in the
+monorepo runbook [`docs/coder/admin/coder-fork-upgrade.md`](https://github.com/altana-tech/monorepo/blob/main/docs/coder/admin/coder-fork-upgrade.md).
 
-- **altana**: our own change. Carry it forward until upstream ships an equivalent.
-- **backport**: an upstream commit that is newer than our base. Drop it once the new base tag contains it.
-- **pin**: a `go.mod` replace pointing at an `altana-ai` fork (`preview`, `trivy`). Re-check it on every upgrade.
+Rows are keyed on the commit subject and its upstream reference. Rebase-merge rewrites commits,
+so add a row's fork SHA only after its PR merges.
 
 ## patch/altana-v2.38.10 (release `v2.38.10-altana.1`)
 
-| Commit | Kind | Change | Upstream status |
+| Change | Kind | Upstream | Fork SHA |
 | --- | --- | --- | --- |
-| `5bd143403e` | altana | feat(site): block workspace creation while dynamic parameters are updating | Not upstream |
-| `2dbc31467c` | backport | fix: keep in-flight builds from blocking the prebuild hard limit (#30060) | Upstream `main` `5563b7444d`, not in v2.38.10 |
-| `5095780ba1` | altana | fix(coderd/database): back off schedule-only prebuild presets | Not upstream |
-| `26ec043ab5` | pin | build: pin coder/trivy to the random_* preset convergence fix (`65abc049`) | `altana-ai/trivy` fork |
+| feat(site): block workspace creation while dynamic parameters are updating | altana | Not recorded | `5bd143403e` |
+| fix: keep in-flight builds from blocking the prebuild hard limit | backport | `Upstream-Commit: 5563b7444d` (coder/coder#30060), on upstream `main` but not in v2.38.10 | `2dbc31467c` |
+| fix(coderd/database): back off schedule-only prebuild presets | altana | Not recorded | `5095780ba1` |
+| build: pin coder/trivy to the random_* preset convergence fix | pin | `github.com/coder/trivy` `65abc049`, Coder's own trivy fork, newer than v2.38.10's `15b94953`. Drop once the base pins `65abc049` or later. | `26ec043ab5` |
 
 ## patch/altana-v2.37.4 (releases `v2.37.4-altana.1`, `v2.37.4-altana.2`)
 
-| Commit | Kind | Change | On 2.38.10 |
-| --- | --- | --- | --- |
-| `8c51e94e42` | altana | feat(site): block workspace creation while dynamic parameters are updating | Carried as `5bd143403e` |
-| `2336951070` | pin | build: pin coder/preview and coder/trivy to Altana forks (param-closure) | Only the trivy pin is carried; reason for dropping preview not recorded |
-| `76913533a6` | altana | feat(oauth2): match authorize/token redirect_uri against any registered URI | Dropped; upstream made `redirect_uris` the source of truth in 2.38 (`b9e3de8403`) |
-| `17e03d8e71` | pin | build: pin altana-ai/trivy to stable random_* presets (`86c30051`) | Replaced by `26ec043ab5` |
-| `8265d26c29` | altana | fix(coderd/database): back off schedule-only prebuild presets | Carried as `5095780ba1` |
-| `1d5e002f40` | altana, since upstreamed | fix(coderd/database): keep in-flight builds from blocking the prebuild hard limit | Carried as backport `2dbc31467c` |
-| `d05e0ba00d` | backport | feat: accept PKCE-only token exchange for public clients (#28047) | Dropped; in v2.38.10 (`9be61a0c65`) |
-
-## In review
-
-| PR | Kind | Change | Branch | Notes |
-| --- | --- | --- | --- | --- |
-| [#3](https://github.com/altana-ai/coder/pull/3) | altana | feat(coderd): confine listed users to an allowlist of routes (DX-5477) | `patch/altana-v2.37.4` | Server-side only. Cherry-picks onto 2.38.10 with one conflict, in `coderd/coderdtest/coderdtest.go`. On 2.38, re-check that Detail's 3 routes still exist: 2.38 keeps `/api/v2/chats` but removes the experimental chat mounts (#29548). |
-
-## Upgrading to a new base
-
-1. Cut `patch/altana-v<new>` from the upstream tag ([RELEASE.md](RELEASE.md)).
-2. For each row on the current branch:
-   - **backport**: check whether the new tag contains it (`git merge-base --is-ancestor <upstream sha> v<new>`, or search the subject). Drop it if it does.
-   - **altana**: check whether upstream shipped an equivalent. If not, cherry-pick it. If the code moved, re-port it by hand and say so in the commit body.
-   - **pin**: confirm the fork commit is still needed against the new base.
-3. Build and test each patch on the new base before dispatching the release.
-4. Add a section for the new branch here, with the outcome for every row of the previous branch.
+| Change | Kind | On 2.38.10 |
+| --- | --- | --- |
+| feat(site): block workspace creation while dynamic parameters are updating | altana | Carried |
+| build: pin coder/preview and coder/trivy to Altana forks (param-closure) | pin | Dropped. Upstream merged our param-closure fix as coder/preview#226 (`c0dfdeecbd89`), and v2.38.10 pins exactly that commit. The trivy half is replaced by the `coder/trivy` pin. |
+| feat(oauth2): match authorize/token redirect_uri against any registered URI | altana | Dropped. 2.38 matches against the registered `redirect_uris`. Accepted behaviour change: 2.38 allows any port on a registered loopback redirect URI (RFC 8252), which our patch did not. |
+| build: pin altana-ai/trivy to stable random_* presets (`86c30051`) | pin | Dropped. The fix is in `coder/trivy` `65abc049`, pinned on 2.38.10. |
+| fix(coderd/database): back off schedule-only prebuild presets | altana | Carried |
+| fix(coderd/database): keep in-flight builds from blocking the prebuild hard limit | altana, since upstreamed | Carried as a backport of the upstream commit (coder/coder#30060) |
+| feat: accept PKCE-only token exchange for public clients (coder/coder#28047) | backport | Dropped. In v2.38.10 (`9be61a0c65`). |
