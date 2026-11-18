@@ -47,6 +47,7 @@ type DBTokenProvider struct {
 	WorkspaceAgentInactiveTimeout   time.Duration
 	WorkspaceAppAuditSessionTimeout time.Duration
 	Keycache                        cryptokeys.SigningKeycache
+	UserRouteAllowlist              httpmw.UserRouteAllowlist
 }
 
 var _ SignedTokenProvider = &DBTokenProvider{}
@@ -62,6 +63,7 @@ func NewDBTokenProvider(ctx context.Context,
 	workspaceAgentInactiveTimeout time.Duration,
 	workspaceAppAuditSessionTimeout time.Duration,
 	signer cryptokeys.SigningKeycache,
+	userRouteAllowlist httpmw.UserRouteAllowlist,
 ) SignedTokenProvider {
 	if workspaceAgentInactiveTimeout == 0 {
 		workspaceAgentInactiveTimeout = 1 * time.Minute
@@ -82,6 +84,7 @@ func NewDBTokenProvider(ctx context.Context,
 		WorkspaceAgentInactiveTimeout:   workspaceAgentInactiveTimeout,
 		WorkspaceAppAuditSessionTimeout: workspaceAppAuditSessionTimeout,
 		Keycache:                        signer,
+		UserRouteAllowlist:              userRouteAllowlist,
 	}
 }
 
@@ -127,6 +130,11 @@ func (p *DBTokenProvider) Issue(ctx context.Context, rw http.ResponseWriter, r *
 		},
 	})
 	if !ok {
+		return nil, "", false
+	}
+	// App cookies bypass PrecheckAPIKey, so httpmw.RestrictUserRoutes never sees these keys.
+	if apiKey != nil && p.UserRouteAllowlist.Listed(apiKey.UserID) {
+		httpapi.Write(ctx, rw, http.StatusForbidden, codersdk.Response{Message: httpmw.UserRouteRefusal})
 		return nil, "", false
 	}
 

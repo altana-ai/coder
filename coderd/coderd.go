@@ -207,6 +207,9 @@ type Options struct {
 	// for all authenticated users under a condition, only in Enterprise.
 	PostAuthAdditionalHeadersFunc func(auth rbac.Subject, header http.Header)
 
+	// UserRouteAllowlist confines partner service accounts to the routes they need.
+	UserRouteAllowlist httpmw.UserRouteAllowlist
+
 	// TLSCertificates is used to mesh DERP servers securely.
 	TLSCertificates    []tls.Certificate
 	TailnetCoordinator tailnet.Coordinator
@@ -751,6 +754,7 @@ func New(options *Options) *API {
 		options.AgentInactiveDisconnectTimeout,
 		options.WorkspaceAppAuditSessionTimeout,
 		options.AppSigningKeyCache,
+		options.UserRouteAllowlist,
 	)
 
 	f := appearance.NewDefaultFetcher(options.Database, api.DeploymentValues.DocsURL.String())
@@ -1188,6 +1192,7 @@ func New(options *Options) *API {
 			DisableSessionExpiryRefresh: options.DeploymentValues.Sessions.DisableExpiryRefresh.Value(),
 			Logger:                      options.Logger,
 		}),
+		httpmw.RestrictUserRoutes(options.UserRouteAllowlist),
 		httpmw.HTTPRoute, // NB: prometheusMW depends on this middleware.
 		prometheusMW,
 		// Build-Version is helpful for debugging.

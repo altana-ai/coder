@@ -751,7 +751,13 @@ func (r *RootCmd) Server(newAPI func(context.Context, *coderd.Options) (*coderd.
 				clusterHost = vals.DERP.Server.RelayURL.Value().Hostname()
 			}
 
+			userRouteAllowlist, err := httpmw.ParseUserRouteAllowlist(os.Getenv(httpmw.UserRouteAllowlistEnv))
+			if err != nil {
+				return err
+			}
+
 			options := &coderd.Options{
+				UserRouteAllowlist:          userRouteAllowlist,
 				AccessURL:                   vals.AccessURL.Value(),
 				AppHostname:                 appHostname,
 				AppHostnameRegex:            appHostnameRegex,
