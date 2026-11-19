@@ -12,6 +12,18 @@ monorepo runbook [`docs/coder/admin/coder-fork-upgrade.md`](https://github.com/a
 Rows are keyed on the commit subject and its upstream reference. Rebase-merge rewrites commits,
 so add a row's fork SHA only after its PR merges.
 
+## patch/altana-v2.39.4 (no release yet)
+
+Cut from upstream `v2.39.4` for DX-5488. Fork SHAs are added after the work-branch PR merges.
+
+| Change | Kind | Upstream | On 2.39.4 |
+| --- | --- | --- | --- |
+| feat(site): block workspace creation while dynamic parameters are updating | altana | `Upstream-PR: coder/coder#30061`, closed unmerged by the stale bot. Trailer added on this branch. | Carried |
+| fix: keep in-flight builds from blocking the prebuild hard limit | backport | `Upstream-Commit: 5563b7444d` (coder/coder#30060), on upstream `main` but not in v2.39.4 | Carried, cherry-picked from the upstream commit |
+| fix(coderd/database): back off schedule-only prebuild presets | altana | `Upstream-PR: coder/coder#30059`, closed unmerged by the stale bot. Trailer added on this branch. | Carried |
+| build: pin coder/trivy to the random_* preset convergence fix | pin | `github.com/coder/trivy` `65abc049` | Dropped. v2.39.4's `go.mod` pins `coder/trivy` `65abc04915bd` itself. |
+| feat(coderd): confine listed users to an allowlist of routes | altana | `Upstream-PR: none`. Altana-specific (DX-5477). | Carried |
+
 ## patch/altana-v2.38.10 (releases `v2.38.10-altana.1`, `v2.38.10-altana.2`)
 
 | Change | Kind | Upstream | Fork SHA |
