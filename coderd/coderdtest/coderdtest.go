@@ -114,6 +114,8 @@ const DefaultDERPMeshKey = "test-key"
 const defaultTestDaemonName = "test-daemon"
 
 type Options struct {
+	// UserRouteAllowlist confines listed users to their routes, as CODER_ALTANA_USER_ROUTE_ALLOWLIST does.
+	UserRouteAllowlist httpmw.UserRouteAllowlist
 	// AccessURL denotes a custom access URL. By default we use the httptest
 	// server's URL. Setting this may result in unexpected behavior (especially
 	// with running agents).
@@ -631,6 +633,7 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 			ChatWorkerDisabled:             options.ChatWorkerDisabled,
 			AccessURL:                      accessURL,
 			AppHostname:                    options.AppHostname,
+			UserRouteAllowlist:             options.UserRouteAllowlist,
 			AppHostnameRegex:               appHostnameRegex,
 			Logger:                         *options.Logger,
 			CacheDir:                       cacheDir,
