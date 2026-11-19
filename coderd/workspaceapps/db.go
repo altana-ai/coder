@@ -48,6 +48,7 @@ type DBTokenProvider struct {
 	WorkspaceAgentInactiveTimeout   time.Duration
 	WorkspaceAppAuditSessionTimeout time.Duration
 	Keycache                        cryptokeys.SigningKeycache
+	UserRouteAllowlist              httpmw.UserRouteAllowlist
 
 	// agentOfflineTotal counts requests that got the agent offline page. Unlike
 	// coderd_agents_connections, which samples agent status once a minute, it
@@ -71,6 +72,7 @@ func NewDBTokenProvider(ctx context.Context,
 	workspaceAppAuditSessionTimeout time.Duration,
 	signer cryptokeys.SigningKeycache,
 	reg prometheus.Registerer,
+	userRouteAllowlist httpmw.UserRouteAllowlist,
 ) SignedTokenProvider {
 	if workspaceAgentInactiveTimeout == 0 {
 		workspaceAgentInactiveTimeout = 1 * time.Minute
@@ -100,6 +102,7 @@ func NewDBTokenProvider(ctx context.Context,
 		WorkspaceAppAuditSessionTimeout: workspaceAppAuditSessionTimeout,
 		Keycache:                        signer,
 		agentOfflineTotal:               agentOfflineTotal,
+		UserRouteAllowlist:              userRouteAllowlist,
 	}
 }
 
@@ -145,6 +148,11 @@ func (p *DBTokenProvider) Issue(ctx context.Context, rw http.ResponseWriter, r *
 		},
 	})
 	if !ok {
+		return nil, "", false
+	}
+	// App cookies bypass PrecheckAPIKey, so httpmw.RestrictUserRoutes never sees these keys.
+	if apiKey != nil && p.UserRouteAllowlist.Listed(apiKey.UserID) {
+		httpapi.Write(ctx, rw, http.StatusForbidden, codersdk.Response{Message: httpmw.UserRouteRefusal})
 		return nil, "", false
 	}
 
