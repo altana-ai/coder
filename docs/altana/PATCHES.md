@@ -16,9 +16,9 @@ so add a row's fork SHA only after its PR merges.
 
 | Change | Kind | Upstream | Fork SHA |
 | --- | --- | --- | --- |
-| feat(site): block workspace creation while dynamic parameters are updating | altana | Not recorded | `5bd143403e` |
+| feat(site): block workspace creation while dynamic parameters are updating | altana | Proposed as coder/coder#30061, closed unmerged. The commit has no trailer. | `5bd143403e` |
 | fix: keep in-flight builds from blocking the prebuild hard limit | backport | `Upstream-Commit: 5563b7444d` (coder/coder#30060), on upstream `main` but not in v2.38.10 | `2dbc31467c` |
-| fix(coderd/database): back off schedule-only prebuild presets | altana | Not recorded | `5095780ba1` |
+| fix(coderd/database): back off schedule-only prebuild presets | altana | Proposed as coder/coder#30059, closed unmerged. The commit has no trailer. | `5095780ba1` |
 | build: pin coder/trivy to the random_* preset convergence fix | pin | `github.com/coder/trivy` `65abc049`, Coder's own trivy fork, newer than v2.38.10's `15b94953`. Drop once the base pins `65abc049` or later. | `26ec043ab5` |
 | feat(coderd): confine listed users to an allowlist of routes | altana | `Upstream-PR: none`. Altana-specific: confines a partner service account by user ID (DX-5477). Added in `v2.38.10-altana.2`. | `319d2dacf9` |
 
