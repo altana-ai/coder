@@ -24,6 +24,8 @@ Cut from upstream `v2.39.4` for DX-5488. Fork SHAs are added after the work-bran
 | build: pin coder/trivy to the random_* preset convergence fix | pin | `github.com/coder/trivy` `65abc049` | Dropped. v2.39.4's `go.mod` pins `coder/trivy` `65abc04915bd` itself. |
 | feat(coderd): confine listed users to an allowlist of routes | altana | `Upstream-PR: none`. Altana-specific (DX-5477). | Carried |
 
+altana-ai/coder#6 is open against 2.38.10; it lands as its own PR into `patch/altana-v2.39.4` once it merges.
+
 ## patch/altana-v2.38.10 (releases `v2.38.10-altana.1`, `v2.38.10-altana.2`)
 
 | Change | Kind | Upstream | Fork SHA |
