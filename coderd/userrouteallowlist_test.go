@@ -145,7 +145,7 @@ func TestUserRouteAllowlistTemplateACL(t *testing.T) {
 		coderdtest.CreateWorkspace(t, memberClient, everyoneOnly.ID)
 	})
 
-	t.Run("chat owner subject honours it", func(t *testing.T) {
+	t.Run("chat owner subject honors it", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)
 		owner, _, err := httpmw.UserRBACSubject(ctx, api.Database, partner.ID, rbac.ScopeAll)
