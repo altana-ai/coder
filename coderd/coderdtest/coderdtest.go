@@ -289,6 +289,8 @@ func NewOptions(t testing.TB, options *Options) (func(http.Handler), context.Can
 			options.Authorizer = defAuth
 		}
 	}
+	// coderd.New wraps it too, but the database below is wrapped with it first.
+	options.Authorizer = options.UserRouteAllowlist.TemplateAuthorizer(options.Authorizer)
 
 	var usageInserter *atomic.Pointer[usage.Inserter]
 	if options.UsageInserter != nil {
