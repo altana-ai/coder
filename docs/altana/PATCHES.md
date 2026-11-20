@@ -25,7 +25,7 @@ Cut from upstream `v2.39.4` for DX-5488. Fork SHAs are added after the work-bran
 | feat(coderd): confine listed users to an allowlist of routes | altana | `Upstream-PR: none`. Altana-specific (DX-5477). | Carried |
 | feat(coderd): ignore template group ACLs for allowlisted users | altana | `Upstream-PR: none`. Altana-specific (DX-5477). | Carried |
 
-## patch/altana-v2.38.10 (releases `v2.38.10-altana.1`, `v2.38.10-altana.2`)
+## patch/altana-v2.38.10 (releases `v2.38.10-altana.1`, `v2.38.10-altana.2`, `v2.38.10-altana.3`)
 
 | Change | Kind | Upstream | Fork SHA |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ Cut from upstream `v2.39.4` for DX-5488. Fork SHAs are added after the work-bran
 | fix(coderd/database): back off schedule-only prebuild presets | altana | Proposed as coder/coder#30059, closed unmerged. The commit has no trailer. | `5095780ba1` |
 | build: pin coder/trivy to the random_* preset convergence fix | pin | `github.com/coder/trivy` `65abc049`, Coder's own trivy fork, newer than v2.38.10's `15b94953`. Drop once the base pins `65abc049` or later. | `26ec043ab5` |
 | feat(coderd): confine listed users to an allowlist of routes | altana | `Upstream-PR: none`. Altana-specific: confines a partner service account by user ID (DX-5477). Added in `v2.38.10-altana.2`. | `319d2dacf9` |
-| feat(coderd): ignore template group ACLs for allowlisted users | altana | `Upstream-PR: none`. Altana-specific: a listed user reaches a template only through a direct user ACL entry, not a group such as Everyone (DX-5477). Not yet in a release. | `441dae40ab` |
+| feat(coderd): ignore template group ACLs for allowlisted users | altana | `Upstream-PR: none`. Altana-specific: a listed user reaches a template only through a direct user ACL entry, not a group such as Everyone (DX-5477). Added in `v2.38.10-altana.3`. | `441dae40ab` |
 
 ## patch/altana-v2.37.4 (releases `v2.37.4-altana.1`, `v2.37.4-altana.2`)
 
