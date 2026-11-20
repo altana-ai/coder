@@ -433,6 +433,8 @@ func New(options *Options) *API {
 		options.AccessControlStore.Store(&tacs)
 	}
 
+	options.Authorizer = options.UserRouteAllowlist.TemplateAuthorizer(options.Authorizer)
+
 	options.Database = dbauthz.New(
 		options.Database,
 		options.Authorizer,

@@ -1,6 +1,7 @@
 package httpmw
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -10,12 +11,17 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/coderd/httpapi"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/rbac/policy"
+	"github.com/coder/coder/v2/coderd/rbac/regosql"
+	"github.com/coder/coder/v2/coderd/rbac/regosql/sqltypes"
 	"github.com/coder/coder/v2/codersdk"
 )
 
 // UserRouteAllowlistEnv holds a JSON object mapping a user ID to the only
 // "METHOD /path" routes that user may call. A final "/{regex}" segment matches
-// one path segment against the anchored regex. Listed users may never use workspace apps.
+// one path segment against the anchored regex. Listed users may never use workspace apps,
+// and template group ACLs, Everyone included, grant them nothing.
 const UserRouteAllowlistEnv = "CODER_ALTANA_USER_ROUTE_ALLOWLIST"
 
 // UserRouteRefusal is the message a listed user gets for any route outside their allowlist.
@@ -123,4 +129,54 @@ func RestrictUserRoutes(list UserRouteAllowlist) func(http.Handler) http.Handler
 			httpapi.Write(r.Context(), rw, http.StatusForbidden, codersdk.Response{Message: UserRouteRefusal})
 		})
 	}
+}
+
+// TemplateAuthorizer wraps inner so template group ACLs, Everyone included, grant listed users
+// nothing: they may use only templates whose user ACL names them. Other resources are unaffected.
+func (l UserRouteAllowlist) TemplateAuthorizer(inner rbac.Authorizer) rbac.Authorizer {
+	if _, wrapped := inner.(templateGroupACLAuthorizer); wrapped || len(l) == 0 {
+		return inner
+	}
+	return templateGroupACLAuthorizer{inner: inner, list: l}
+}
+
+type templateGroupACLAuthorizer struct {
+	inner rbac.Authorizer
+	list  UserRouteAllowlist
+}
+
+func (a templateGroupACLAuthorizer) confined(subject rbac.Subject, objectType string) bool {
+	id, err := uuid.Parse(subject.ID)
+	return err == nil && objectType == rbac.ResourceTemplate.Type && a.list.Listed(id)
+}
+
+func (a templateGroupACLAuthorizer) Authorize(ctx context.Context, subject rbac.Subject, action policy.Action, object rbac.Object) error {
+	if a.confined(subject, object.Type) {
+		object.ACLGroupList = nil
+	}
+	return a.inner.Authorize(ctx, subject, action, object)
+}
+
+func (a templateGroupACLAuthorizer) Prepare(ctx context.Context, subject rbac.Subject, action policy.Action, objectType string) (rbac.PreparedAuthorized, error) {
+	prepared, err := a.inner.Prepare(ctx, subject, action, objectType)
+	if err != nil || !a.confined(subject, objectType) {
+		return prepared, err
+	}
+	return noGroupACLPrepared{inner: prepared}, nil
+}
+
+type noGroupACLPrepared struct {
+	inner rbac.PreparedAuthorized
+}
+
+func (p noGroupACLPrepared) Authorize(ctx context.Context, object rbac.Object) error {
+	object.ACLGroupList = nil
+	return p.inner.Authorize(ctx, object)
+}
+
+// CompileToSQL evaluates every group ACL reference, which the policy also makes for Everyone, as false.
+func (p noGroupACLPrepared) CompileToSQL(ctx context.Context, cfg regosql.ConvertConfig) (string, error) {
+	groupACL := regosql.ACLMappingMatcher(cfg.VariableConverter, "group_acl", []string{"input", "object", "acl_group_list"})
+	cfg.VariableConverter = sqltypes.NewVariableConverter().RegisterMatcher(sqltypes.AlwaysFalse(groupACL), cfg.VariableConverter)
+	return p.inner.CompileToSQL(ctx, cfg)
 }
